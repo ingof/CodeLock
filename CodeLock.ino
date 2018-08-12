@@ -194,6 +194,7 @@ OneWire ds(ONE_WIRE);
       ds.reset();
       ds.select(addr);
       ds.write(0x44,1);         // start Konvertierung, mit power-on am Ende
+      
 
       startConvert=millis();
      //if ((millis()-startConvert)>1000) {
