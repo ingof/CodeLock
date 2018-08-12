@@ -1,6 +1,11 @@
+
 #include <EEPROM.h>
 #include <Keypad.h>
 #include "Config.h"
+
+#ifdef OneWireEnabled
+  #include <OneWire.h>
+  #endif //OneWireEnabled
 
 #ifdef EthernetShieldEnabled
   #include <Dhcp.h>
@@ -11,6 +16,18 @@
   #include <EthernetUdp.h>
 #endif //EthernetShieldEnabled
 
+/* Arduino Uno Connections :
+ *  0-1:    Serial
+ *  2-8:    Keypad
+ *  9:      key LED (to GND)
+ *  10-13:  Ethernet Shield
+ *  14:     Door opener
+ *  15:     Light
+ *  16:     ( Relais 3)
+ *  17:     1Wire???
+ *  18:     Sabotage contact (n.c.)
+ *  19:     Door contact (n.c.)
+ */
 
 /* KeyPad Definitonen */
   const byte ROWS = 4; //four rows
@@ -29,12 +46,13 @@
 
 /* Hardwarebelegung */
   int KEY_LED = 9;
+ 
   int KEY_LED_DEFAULT = 0xFF;
   int KEY_LED_OPEN = 0xFF;
   int TUEROEFFNER = 14;
   int LICHT = 15;
   int RELAIS_3 = 16;
-  
+  int ONE_WIRE = 17;
   int TASTATURKONTAKT= 18;
   int TUERKONTAKT = 19;
   
@@ -49,6 +67,7 @@
   long alarmStartKeypad = 0;
   long alarmCountDoor = 0;
   long alarmCountKeypad = 0;
+
 
 #ifdef EthernetShieldEnabled
   //char packetBuffer[UDP_TX_PACKET_MAX_SIZE];  //buffer to hold incoming packet,
@@ -107,20 +126,113 @@ void setup(){
   //digitalWrite(TUERKONTAKT, HIGH);
   analogWrite(KEY_LED, KEY_LED_DEFAULT);
   }
+  
 /* Software Initialisierung */ {
   #ifdef EthernetShieldEnabled
     Ethernet.begin(mac, ip);
     Udp.begin(portLocal);
   #endif //EthernetShieldEnabled
+  
   #ifdef SerialEnabled
     Serial.begin(9600);  
   #endif //SerialEnabled
+  
   logMessage("Codelock Serial V1.0");
-  }
-  
 }
-  
-void loop(){
+
+}
+ 
+//int divider=1;
+long startConvert=millis()+1000;
+
+void loop(void) {
+
+#ifdef OneWireEnabled
+OneWire ds(ONE_WIRE);
+    
+     byte i;
+    byte present = 0;
+    byte data[12];
+    byte addr[8];
+    //divider--;
+    //Serial.print(divider, HEX);
+    if ((millis()-startConvert)>1000) {
+      //divider=100;
+      
+      if ( !ds.search(addr)) {
+          Serial.print("Keine weiteren Addressen.\n");
+          ds.reset_search();
+          return;
+      }   
+      Serial.println();
+      Serial.print("R=");
+      for( i = 0; i < 8; i++) {
+        //Serial.print(addr[i], HEX);
+        printHex(addr[i]);
+        Serial.print(" ");
+      }
+     
+      if ( OneWire::crc8( addr, 7) != addr[7]) {
+          Serial.print("CRC nicht gültig!\n");
+          return;
+      }
+     
+      if ( addr[0] == 0x10) {
+          Serial.print("(DS18S20 Familie)\n");
+      }
+      else if ( addr[0] == 0x28) {
+          Serial.print("(DS18B20 Familie)\n");
+      }
+      else {
+          Serial.print("Gerätefamilie unbekannt : 0x");
+          //Serial.println(addr[0],HEX);
+          printHex(addr[0]);
+          Serial.println();
+          return;
+      }
+     
+      ds.reset();
+      ds.select(addr);
+      ds.write(0x44,1);         // start Konvertierung, mit power-on am Ende
+
+      startConvert=millis();
+     //if ((millis()-startConvert)>1000) {
+    //    delay(100);
+   //     Serial.println(millis()-startConvert);
+  //    }
+//      startConvert=millis();
+
+      
+      //delay(1000);     // 750ms sollten ausreichen
+
+      
+      // man sollte ein ds.depower() hier machen, aber ein reset tut das auch
+      present = ds.reset();
+      ds.select(addr);    
+      ds.write(0xBE);         // Wert lesen
+     
+      
+      Serial.print("P=");
+      //Serial.print(present,HEX);
+      printHex(present);
+      Serial.print("   ");
+      for ( i = 0; i < 9; i++) {           // 9 bytes
+        data[i] = ds.read();
+        //Serial.print(data[i], HEX);
+        printHex(data[i]);
+        Serial.print(" ");
+      }
+      Serial.print(" CRC=");
+      //Serial.print( OneWire::crc8( data, 8), HEX);
+      printHex( OneWire::crc8( data, 8));
+      Serial.println();
+    }
+ // }
+#endif //OneWireEnabled
+
+
+
+//void loop(){
   char customKey = keypad.getKey();
   if (customKey){
     int pwdAccess = 0;
@@ -287,7 +399,16 @@ void loop(){
 
 }
 
+void printHex(int value) {
+  if (value<0x10){
+    Serial.print('0');
+    }
+  Serial.print(value, HEX);
+}
+
+
 int grantAccess(int access) {
+
   // TODO: Abbruch bei Tastendruck ????
   if (access == 0) {
     logMessage("PIN Falsch!\n");
@@ -440,11 +561,14 @@ String formatNumber(unsigned long number, byte digit, char fill) {
   tmpStr += number;
  return tmpStr;
 }
+
  void logMessage(String message) {
   message = getMillis() + message;
+
   #ifdef SerialEnabled
     Serial.println(message);
   #endif //SerialEnabled
+  
   #ifdef EthernetShieldEnabled
     char messageBuffer[message.length()];
     message.toCharArray(messageBuffer,message.length()+1);
@@ -452,6 +576,7 @@ String formatNumber(unsigned long number, byte digit, char fill) {
     Udp.write(messageBuffer,message.length());
     Udp.endPacket();
   #endif //EthernetShieldEnabled
+
  }
 
  

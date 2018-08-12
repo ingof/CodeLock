@@ -5,6 +5,7 @@
 
 #define SerialEnabled
 #define EthernetShieldEnabled
+#define OneWireEnabled
 
 #define OwnPasswordFile
 
