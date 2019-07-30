@@ -38,8 +38,11 @@
     {'7','8','9'},
     {'*','0','#'}
   };
-  byte rowPins[ROWS] = {2, 3, 8, 7}; //connect to the row pinouts of the keypad
-  byte colPins[COLS] = {4, 5, 6}; //connect to the column pinouts of the keypad
+ /* Keyboard */
+  //byte rowPins[ROWS] = {8, 7, 6, 5}; //connect to the row pinouts of the keypad
+  //byte colPins[COLS] = {4, 3, 2}; //connect to the column pinouts of the keypad
+  byte rowPins[ROWS] = {KEY_ROWS}; //connect to the row pinouts of the keypad
+  byte colPins[COLS] = {KEY_COLS}; //connect to the column pinouts of the keypad
    
   Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS); 
 
@@ -98,6 +101,19 @@
     //       0= USED-Flag setzen
     //------------------------------------------------------------
 
+#ifdef OneWireEnabled
+OneWire ds(ONE_WIRE);
+#endif //OneWireEnabled
+
+long startConvert=millis()+750;
+byte convert = 0;
+byte data[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+byte addr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+byte i;
+byte present = 0;
+byte type_s;
+float celsius, fahrenheit;
+
 
 void setup(){
 
@@ -143,94 +159,15 @@ void setup(){
 }
  
 //int divider=1;
-long startConvert=millis()+1000;
+
+
 
 void loop(void) {
-
+  
 #ifdef OneWireEnabled
-OneWire ds(ONE_WIRE);
-    
-     byte i;
-    byte present = 0;
-    byte data[12];
-    byte addr[8];
-    //divider--;
-    //Serial.print(divider, HEX);
-    if ((millis()-startConvert)>1000) {
-      //divider=100;
-      
-      if ( !ds.search(addr)) {
-          Serial.print("Keine weiteren Addressen.\n");
-          ds.reset_search();
-          return;
-      }   
-      Serial.println();
-      Serial.print("R=");
-      for( i = 0; i < 8; i++) {
-        //Serial.print(addr[i], HEX);
-        printHex(addr[i]);
-        Serial.print(" ");
-      }
-     
-      if ( OneWire::crc8( addr, 7) != addr[7]) {
-          Serial.print("CRC nicht gültig!\n");
-          return;
-      }
-     
-      if ( addr[0] == 0x10) {
-          Serial.print("(DS18S20 Familie)\n");
-      }
-      else if ( addr[0] == 0x28) {
-          Serial.print("(DS18B20 Familie)\n");
-      }
-      else {
-          Serial.print("Gerätefamilie unbekannt : 0x");
-          //Serial.println(addr[0],HEX);
-          printHex(addr[0]);
-          Serial.println();
-          return;
-      }
-     
-      ds.reset();
-      ds.select(addr);
-      ds.write(0x44,1);         // start Konvertierung, mit power-on am Ende
-      
-
-      startConvert=millis();
-     //if ((millis()-startConvert)>1000) {
-    //    delay(100);
-   //     Serial.println(millis()-startConvert);
-  //    }
-//      startConvert=millis();
-
-      
-      //delay(1000);     // 750ms sollten ausreichen
-
-      
-      // man sollte ein ds.depower() hier machen, aber ein reset tut das auch
-      present = ds.reset();
-      ds.select(addr);    
-      ds.write(0xBE);         // Wert lesen
-     
-      
-      Serial.print("P=");
-      //Serial.print(present,HEX);
-      printHex(present);
-      Serial.print("   ");
-      for ( i = 0; i < 9; i++) {           // 9 bytes
-        data[i] = ds.read();
-        //Serial.print(data[i], HEX);
-        printHex(data[i]);
-        Serial.print(" ");
-      }
-      Serial.print(" CRC=");
-      //Serial.print( OneWire::crc8( data, 8), HEX);
-      printHex( OneWire::crc8( data, 8));
-      Serial.println();
-    }
- // }
+  check1Wire();
+ 
 #endif //OneWireEnabled
-
 
 
 //void loop(){
@@ -399,6 +336,134 @@ OneWire ds(ONE_WIRE);
 #endif //KeyboardAlarmEnabled
 
 }
+
+#ifdef OneWireEnabled
+void check1Wire(void) {  
+ // OneWire ds(ONE_WIRE);  
+//      byte i;
+//      byte present = 0;
+        present = 0;
+//      byte type_s;
+//      float celsius, fahrenheit;
+//      byte data[12];
+//      byte addr[8];
+      //divider--;
+      //Serial.print(divider, HEX);
+      if ((millis()-startConvert)>750) {
+            //divider=100;
+            
+         if (convert == 0) {
+            if ( !ds.search(addr)) {
+//                Serial.println();
+                Serial.print("Keine weiteren Addressen.\n");
+//                Serial.println();
+                Serial.println();
+                ds.reset_search();
+                return;
+            }   
+//            Serial.println();
+            Serial.print("R=");
+            for( i = 0; i < 8; i++) {
+              //Serial.print(addr[i], HEX);
+              printHex(addr[i]);
+              Serial.print(" ");
+            }
+           
+            if ( OneWire::crc8( addr, 7) != addr[7]) {
+                Serial.print("CRC nicht gültig!\n");
+                return;
+            }
+           
+            if ( addr[0] == 0x10) {
+                type_s = 1;
+                Serial.print("(DS18S20)\n");
+            }
+            else if ( addr[0] == 0x28) {
+                type_s = 0;
+                Serial.print("(DS18B20)\n");
+            }
+            else if ( addr[0] == 0x22) {
+                type_s = 0;
+                Serial.print("(DS1822)\n");
+            }
+            else {
+                Serial.print("Gerätefamilie unbekannt : 0x");
+                //Serial.println(addr[0],HEX);
+                printHex(addr[0]);
+                Serial.println();
+                return;
+            }
+           
+            ds.reset();
+            ds.select(addr);
+            ds.write(0x44,1);         // start Konvertierung, mit power-on am Ende
+            
+      
+            startConvert = millis();
+            convert = 1;
+         } else {
+           //if ((millis()-startConvert)>1000) {
+          //    delay(100);
+         //     Serial.println(millis()-startConvert);
+        //    }
+      //      startConvert=millis();
+            
+//            delay(750);     // 750ms sollten ausreichen /*#############################*/
+      
+            
+            // man sollte ein ds.depower() hier machen, aber ein reset tut das auch
+            present = ds.reset();
+            ds.select(addr);    
+            ds.write(0xBE);         // Wert lesen
+           
+            
+            Serial.print("P=");
+            //Serial.print(present,HEX);
+            printHex(present);
+            Serial.print(" ");
+            for ( i = 0; i < 9; i++) {           // 9 bytes
+              data[i] = ds.read();
+              //Serial.print(data[i], HEX);
+              printHex(data[i]);
+              Serial.print(" ");
+            }
+            Serial.print(" CRC=");
+            //Serial.print( OneWire::crc8( data, 8), HEX);
+            printHex( OneWire::crc8( data, 8));
+//            Serial.println();
+            
+            // Convert the data to actual temperature
+            // because the result is a 16 bit signed integer, it should
+            // be stored to an "int16_t" type, which is always 16 bits
+            // even when compiled on a 32 bit processor.
+            int16_t raw = (data[1] << 8) | data[0];
+            if (type_s) {
+              raw = raw << 3; // 9 bit resolution default
+              if (data[7] == 0x10) {
+                // "count remain" gives full 12 bit resolution
+                raw = (raw & 0xFFF0) + 12 - data[6];
+              }
+            } else {
+              byte cfg = (data[4] & 0x60);
+              // at lower res, the low bits are undefined, so let's zero them
+              if (cfg == 0x00) raw = raw & ~7;  // 9 bit resolution, 93.75 ms
+              else if (cfg == 0x20) raw = raw & ~3; // 10 bit res, 187.5 ms
+              else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
+              //// default is 12 bit resolution, 750 ms conversion time
+            }
+            celsius = (float)raw / 16.0;
+            fahrenheit = celsius * 1.8 + 32.0;
+            Serial.print("  T=");
+            Serial.print(celsius);
+            Serial.print("°C, ");
+            Serial.print(fahrenheit);
+            Serial.println("°F");
+            convert = 0;
+            
+         }
+      }
+  }
+#endif //OneWireEnabled
 
 void printHex(int value) {
   if (value<0x10){
@@ -622,5 +687,3 @@ void LED_NACK() {
   delay(100);
   digitalWrite(LED_BUILTIN, LOW);
 }
-
-

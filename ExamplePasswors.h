@@ -7,9 +7,9 @@
   //       0= acces only if not USED / Default-Pin
   // Bit2: 1= Licht einschalten
   //       0= kein Licht
-  // Bit1: 1= T�r �ffnen, used-Flag setzen
-  //       0= T�r nicht �ffnen
-  // Bit0: 1= USED-Flag l�schen
+  // Bit1: 1= Tür öffnen, used-Flag setzen
+  //       0= Tür nicht öffnen
+  // Bit0: 1= USED-Flag löschen
   //       0= USED-Flag setzen
   //------------------------------------------------------------
   
@@ -22,13 +22,13 @@
 
   // Default-PIN#
   EEPROM[eeCnt++] = '0';
-  EEPROM[eeCnt++] = 0x86; // nur unbenutzt �ffnen, Licht, "USED" nicht zur�cksetzen
+  EEPROM[eeCnt++] = 0x86; // nur unbenutzt öffnen, Licht, "USED" nicht zurücksetzen
   
   // Spezial-PIN
   EEPROM[eeCnt++] = '0';
   EEPROM[eeCnt++] = '0';
   EEPROM[eeCnt++] = '7';
-  EEPROM[eeCnt++] = 0x93; // immer �ffnen, kein Licht, "USED" nicht zur�cksetzen
+  EEPROM[eeCnt++] = 0x93; // immer öffnen, kein Licht, "USED" nicht zurücksetzen
 
   // Master-PIN#
   EEPROM[eeCnt++] = '0';
@@ -42,7 +42,7 @@
   EEPROM[eeCnt++] = '7';
   EEPROM[eeCnt++] = '1';
   EEPROM[eeCnt++] = '1';
-  EEPROM[eeCnt++] = 0x96; // immer �ffnen, Licht, "USED" nicht zur�cksetzen
+  EEPROM[eeCnt++] = 0x96; // immer öffnen, Licht, "USED" nicht zurücksetzen
   
   // End-Markierungen !!
   EEPROM[eeCnt++] = 0;   // End-Markierung
