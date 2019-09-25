@@ -2,6 +2,7 @@
 #include <EEPROM.h>
 #include <Keypad.h>
 #include "Config.h"
+#include "ds18b20.h"
 
 #ifdef OneWireEnabled
   #include <OneWire.h>
@@ -15,6 +16,12 @@
   #include <EthernetServer.h>
   #include <EthernetUdp.h>
 #endif //EthernetShieldEnabled
+
+//RTC
+#ifdef RTCEnabled
+  #include <Wire.h>
+  #include "DS1307.h"
+#endif //RTCEnabled
 
 /* Arduino Uno Connections :
  *  0-1:    Serial
@@ -58,7 +65,7 @@
   int ONE_WIRE = 17;
   int TASTATURKONTAKT= 18;
   int TUERKONTAKT = 19;
-  
+
   int PWDCount = 0;
   long PWD = 0;
   
@@ -102,19 +109,22 @@
     //------------------------------------------------------------
 
 #ifdef OneWireEnabled
-OneWire ds(ONE_WIRE);
+  OneWire ds(ONE_WIRE);
+  long startConvert=millis();//+750;
+  byte convert = 0;
+  byte data[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  byte addr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  boolean power;
+  byte i;
+  byte present;
+  byte type_s;
+  float celsius, fahrenheit;
 #endif //OneWireEnabled
 
-long startConvert=millis()+750;
-byte convert = 0;
-byte data[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-byte addr[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-byte i;
-byte present = 0;
-byte type_s;
-float celsius, fahrenheit;
-
-
+//RTC
+#ifdef RTCEnabled
+  DS1307 clock;//define a object of DS1307 class
+#endif //RTCEnabled
 void setup(){
 
  /*Passwörter und Rechte */ {
@@ -141,6 +151,7 @@ void setup(){
   digitalWrite(RELAIS_3, HIGH);
   //digitalWrite(TUERKONTAKT, HIGH);
   analogWrite(KEY_LED, KEY_LED_DEFAULT);
+
   }
   
 /* Software Initialisierung */ {
@@ -154,6 +165,12 @@ void setup(){
   #endif //SerialEnabled
   
   logMessage("Codelock Serial V1.0");
+
+//RTC
+#ifdef RTCEnabled
+  printTime();
+#endif //RTCEnabled
+
 }
 
 }
@@ -166,8 +183,8 @@ void loop(void) {
   
 #ifdef OneWireEnabled
   check1Wire();
- 
 #endif //OneWireEnabled
+
 
 
 //void loop(){
@@ -339,18 +356,20 @@ void loop(void) {
 
 #ifdef OneWireEnabled
 void check1Wire(void) {  
- // OneWire ds(ONE_WIRE);  
-//      byte i;
-//      byte present = 0;
         present = 0;
-//      byte type_s;
-//      float celsius, fahrenheit;
-//      byte data[12];
-//      byte addr[8];
-      //divider--;
-      //Serial.print(divider, HEX);
-      if ((millis()-startConvert)>750) {
-            //divider=100;
+      byte continueConvert = 0;
+      if (power) {
+        while (!ds.read_bit()){
+          delay(25);
+        }
+        continueConvert=1;
+      } else {
+        if ((millis()-startConvert)>750) {
+          continueConvert=1;
+        }
+      }
+      if (continueConvert) {
+           //divider=100;
             
          if (convert == 0) {
             if ( !ds.search(addr)) {
@@ -360,7 +379,15 @@ void check1Wire(void) {
                 Serial.println();
                 ds.reset_search();
                 return;
-            }   
+            }
+            
+            ds.reset();
+            ds.write(SkipROM);
+            ds.write(ReadPowerSupply);
+            power=ds.read_bit();
+
+
+               
 //            Serial.println();
             Serial.print("R=");
             for( i = 0; i < 8; i++) {
@@ -376,27 +403,28 @@ void check1Wire(void) {
            
             if ( addr[0] == 0x10) {
                 type_s = 1;
-                Serial.print("(DS18S20)\n");
+                Serial.print("(DS18S20)");
             }
             else if ( addr[0] == 0x28) {
                 type_s = 0;
-                Serial.print("(DS18B20)\n");
+                Serial.print("(DS18B20)");
             }
             else if ( addr[0] == 0x22) {
                 type_s = 0;
-                Serial.print("(DS1822)\n");
+                Serial.print("(DS1822)");
             }
             else {
                 Serial.print("Gerätefamilie unbekannt : 0x");
-                //Serial.println(addr[0],HEX);
                 printHex(addr[0]);
                 Serial.println();
                 return;
             }
-           
+            Serial.println();
+            
+                       
             ds.reset();
             ds.select(addr);
-            ds.write(0x44,1);         // start Konvertierung, mit power-on am Ende
+            ds.write(ConvertT,1);         // start Konvertierung, mit power-on am Ende
             
       
             startConvert = millis();
@@ -414,7 +442,7 @@ void check1Wire(void) {
             // man sollte ein ds.depower() hier machen, aber ein reset tut das auch
             present = ds.reset();
             ds.select(addr);    
-            ds.write(0xBE);         // Wert lesen
+            ds.write(ReadScratchPad);         // Wert lesen
            
             
             Serial.print("P=");
@@ -431,6 +459,11 @@ void check1Wire(void) {
             //Serial.print( OneWire::crc8( data, 8), HEX);
             printHex( OneWire::crc8( data, 8));
 //            Serial.println();
+            if (power){
+               Serial.print("  External");
+            } else {
+              Serial.print("  Parasite");
+            }
             
             // Convert the data to actual temperature
             // because the result is a 16 bit signed integer, it should
@@ -451,13 +484,21 @@ void check1Wire(void) {
               else if (cfg == 0x40) raw = raw & ~1; // 11 bit res, 375 ms
               //// default is 12 bit resolution, 750 ms conversion time
             }
+            
+            #ifdef Celsius
             celsius = (float)raw / 16.0;
-            fahrenheit = celsius * 1.8 + 32.0;
             Serial.print("  T=");
             Serial.print(celsius);
-            Serial.print("°C, ");
+            Serial.print("°C");
+            #endif //Celsius
+            
+            #ifdef Fahrenheit
+            fahrenheit = (float)raw / 16.0 * 1.8 + 32.0;
+            Serial.print("  T=");
             Serial.print(fahrenheit);
-            Serial.println("°F");
+            Serial.print("°F");
+            #endif //Fahrenheit
+            Serial.println();
             convert = 0;
             
          }
@@ -687,3 +728,50 @@ void LED_NACK() {
   delay(100);
   digitalWrite(LED_BUILTIN, LOW);
 }
+//RTC tests
+#ifdef RTCEnabled
+  /*Function: Display time on the serial monitor*/
+  void printTime()
+  {
+    clock.getTime();
+    Serial.print(clock.hour, DEC);
+    Serial.print(":");
+    Serial.print(clock.minute, DEC);
+    Serial.print(":");
+    Serial.print(clock.second, DEC);
+    Serial.print("  ");
+    Serial.print(clock.month, DEC);
+    Serial.print("/");
+    Serial.print(clock.dayOfMonth, DEC);
+    Serial.print("/");
+    Serial.print(clock.year+2000, DEC);
+    Serial.print(" ");
+    Serial.print(clock.dayOfMonth);
+    Serial.print("*");
+    switch (clock.dayOfWeek)// Friendly printout the weekday
+    {
+      case MON:
+        Serial.print("MON");
+        break;
+      case TUE:
+        Serial.print("TUE");
+        break;
+      case WED:
+        Serial.print("WED");
+        break;
+      case THU:
+        Serial.print("THU");
+        break;
+      case FRI:
+        Serial.print("FRI");
+        break;
+      case SAT:
+        Serial.print("SAT");
+        break;
+      case SUN:
+        Serial.print("SUN");
+        break;
+    }
+    Serial.println(" ");
+  }
+#endif //RTCEnabled

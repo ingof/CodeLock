@@ -6,6 +6,9 @@
 #define SerialEnabled
 #define EthernetShieldEnabled
 #define OneWireEnabled
+//#define RTCEnabled
+#define Celsius
+#define Fahrenheit
 
 #define OwnPasswordFile
 
