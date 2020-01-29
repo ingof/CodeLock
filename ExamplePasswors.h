@@ -5,6 +5,8 @@
   //       0= Zeichen
   // Bit4: 1= acces every time
   //       0= acces only if not USED / Default-Pin
+  // Bit3: 1= acces only in special Timerange
+  //       0= access every time
   // Bit2: 1= Licht einschalten
   //       0= kein Licht
   // Bit1: 1= Tür öffnen, used-Flag setzen
